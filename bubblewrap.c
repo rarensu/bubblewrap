@@ -2556,20 +2556,9 @@ namespace_ids_read (pid_t  pid)
       struct stat st;
       int r;
 
-      /* if we don't unshare this ns, ignore it unless we join a preexisting one */
+      /* if we don't unshare this ns, ignore it */
       if (do_unshare && *do_unshare == false)
-        {
-          if (strcmp (info->name, "net") == 0 && opt_netns_fd != -1)
-            {
-              /* we want to read the netns info */
-            }
-          else if (strcmp (info->name, "pid") == 0 && opt_pidns_fd != -1)
-            {
-              /* we want to read the pidns info */
-            }
-          else
-            continue;
-        }
+        continue;
 
       r = fstatat (ns_fd, info->name, &st, 0);
 
