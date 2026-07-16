@@ -90,6 +90,7 @@ static char *opt_args_data = NULL;  /* owned */
 static int opt_userns_fd = -1;
 static int opt_userns2_fd = -1;
 static int opt_pidns_fd = -1;
+static int opt_netns_fd = -1;
 static int opt_tmp_overlay_count = 0;
 static int next_perms = -1;
 static size_t next_size_arg = 0;
@@ -303,6 +304,7 @@ usage (int ecode, FILE *out)
            "    --disable-userns             Disable further use of user namespaces inside sandbox\n"
            "    --assert-userns-disabled     Fail unless further use of user namespace inside sandbox is disabled\n"
            "    --pidns FD                   Use this pid namespace (as parent namespace if using --unshare-pid)\n"
+           "    --netns FD                   Use this net namespace (cannot combine with --unshare-net)\n"
            "    --uid UID                    Custom uid in the sandbox (requires --unshare-user or --userns)\n"
            "    --gid GID                    Custom gid in the sandbox (requires --unshare-user or --userns)\n"
            "    --hostname NAME              Custom hostname in the sandbox (requires --unshare-uts)\n"
@@ -2213,6 +2215,26 @@ parse_args_recurse (int          *argcp,
           argv += 1;
           argc -= 1;
         }
+      else if (strcmp (arg, "--netns") == 0)
+        {
+          int the_fd;
+          char *endptr;
+
+          if (argc < 2)
+            die ("--netns takes an argument");
+
+          if (opt_netns_fd != -1)
+            warn_only_last_option ("--netns");
+
+          the_fd = strtol (argv[1], &endptr, 10);
+          if (argv[1][0] == 0 || endptr[0] != 0 || the_fd < 0)
+            die ("Invalid fd: %s", argv[1]);
+
+          opt_netns_fd = the_fd;
+
+          argv += 1;
+          argc -= 1;
+        }
       else if (strcmp (arg, "--clearenv") == 0)
         {
           xclearenv ();
@@ -2534,9 +2556,20 @@ namespace_ids_read (pid_t  pid)
       struct stat st;
       int r;
 
-      /* if we don't unshare this ns, ignore it */
+      /* if we don't unshare this ns, ignore it unless we join a preexisting one */
       if (do_unshare && *do_unshare == false)
-        continue;
+        {
+          if (strcmp (info->name, "net") == 0 && opt_netns_fd != -1)
+            {
+              /* we want to read the netns info */
+            }
+          else if (strcmp (info->name, "pid") == 0 && opt_pidns_fd != -1)
+            {
+              /* we want to read the pidns info */
+            }
+          else
+            continue;
+        }
 
       r = fstatat (ns_fd, info->name, &st, 0);
 
@@ -2655,6 +2688,9 @@ main (int    argc,
 
   if (opt_userns_fd != -1 && opt_unshare_user_try)
     die ("--userns is not compatible with --unshare-user-try");
+
+  if (opt_netns_fd != -1 && opt_unshare_net)
+    die ("--netns is not compatible with --unshare-net");
 
   if (opt_disable_userns && !opt_unshare_user)
     die ("--disable-userns requires --unshare-user");
@@ -2798,6 +2834,9 @@ main (int    argc,
       die_with_error ("Joining specified user namespace failed");
     }
 
+  if (opt_netns_fd != -1 && setns (opt_netns_fd, CLONE_NEWNET) != 0)
+    die_with_error ("Joining specified net namespace failed");
+
   /* Sometimes we have uninteresting intermediate pids during the setup, set up code to pass the real pid down */
   if (opt_pidns_fd != -1)
     {
@@ -2938,6 +2977,10 @@ main (int    argc,
    */
   switch_to_user_with_privs ();
 
+  /* If a pre-existing network namespace is specified via --netns, we assume
+   * that it already contains a loopback interface, so we do not call
+   * loopback_setup().
+   */
   if (opt_unshare_net)
     loopback_setup (); /* Will exit if unsuccessful */
 
