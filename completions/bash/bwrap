@@ -51,12 +51,10 @@ _bwrap() {
 		--hostname
 		--info-fd
 		--lock-file
-		--mqueue
 		--netns
 		--overlay
 		--overlay-src
 		--perms
-		--pidns
 		--proc
 		--remount-ro
 		--ro-bind
@@ -69,8 +67,6 @@ _bwrap() {
 		--tmp-overlay
 		--uid
 		--unsetenv
-		--userns
-		--userns2
 		--userns-block-fd
 	"
 
